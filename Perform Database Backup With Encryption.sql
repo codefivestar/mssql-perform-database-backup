@@ -1,31 +1,29 @@
 ----------------------------------------------------------------------------------------------------------
 -- Author      : Hidequel Puga
--- Date        : 2021-08-07
--- Description : Perform database backup 
+-- Date        : 2022-06-01
+-- Description : Perform database backup + compress + encryption
 ----------------------------------------------------------------------------------------------------------
 
 --
 -- Declarations 
 --
-DECLARE @database   AS NVARCHAR(50)
+DECLARE @database           AS NVARCHAR(50)
       , @default_backup_dir AS NVARCHAR(4000)
 	  , @current_date       AS NVARCHAR(25)
 	  , @backup_file        AS NVARCHAR(4000)
 	  , @backup_set_name    AS  NVARCHAR(150)
 	  , @backup_set_id      AS INT
     
---
--- Assignments 
---
-    SET @database = DB_NAME()
-	SET @current_date     = FORMAT(GETDATE(), 'yyyy_MM_dd_HH_mm_tt')
+    SET @database     = DB_NAME() -- get current database
+	SET @current_date = FORMAT(GETDATE(), 'yyyy_MM_dd_HH_mm_tt') -- date description
 
+    -- get default path for backup (.bak)
 	EXEC master.dbo.xp_instance_regread N'HKEY_LOCAL_MACHINE'
 	                                  , N'Software\Microsoft\MSSQLServer\MSSQLServer'
 	                                  , N'BackupDirectory'
 	                                  , @default_backup_dir OUTPUT
-	SET @backup_file      = @default_backup_dir + '\' + @database + '_backup_' + @current_date + '.bak'
-	SET @backup_set_name  = @database + ' - Full Database Backup ' + @current_date
+	SET @backup_file      = @default_backup_dir + '\' + @database + '_backup_' + @current_date + '.bak' -- backup directory + file name .bak
+	SET @backup_set_name  = @database + ' - Full Database Backup ' + @current_date -- backup description           
 
 --
 -- Perform backup
@@ -38,6 +36,11 @@ BACKUP DATABASE @database
 , NOREWIND
 , NOUNLOAD
 , COMPRESSION
+-- encryption
+, ENCRYPTION (
+		        ALGORITHM          = AES_256
+		      , SERVER CERTIFICATE = [CFS_BackupCertificate] -- certificate name
+		      )
 , STATS = 10
 , CHECKSUM
 
@@ -52,8 +55,6 @@ SELECT @backup_set_id = position
                           FROM msdb..backupset 
 						 WHERE database_name = @database
 						 )
-
-						 SELECT @backup_set_id 
 
 IF (@backup_set_id IS NULL)
 	BEGIN 
